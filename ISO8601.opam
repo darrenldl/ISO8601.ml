@@ -15,6 +15,7 @@ depends: [
   "stdlib-shims" {with-test}
   "odoc" {with-doc}
   "ounit2" {with-test}
+  "alcotest" {with-test}
   "bisect_ppx" {with-test & >= "2.5" & dev}
 ]
 build: [

@@ -1,3 +1,9 @@
 (test
   (name ISO8601_TEST)
+  (modules (:standard \ test))
   (libraries stdlib-shims unix ounit2 ISO8601))
+
+(test
+  (name test)
+  (modules test)
+  (libraries unix alcotest ISO8601))
