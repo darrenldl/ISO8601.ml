@@ -62,4 +62,10 @@ let suite =
           [
             datetime "2015-02-15T11:55" (mkdatetime 2015 02 15 11 55 0) ;
           ] ;
+    OUnit.(>:::) "[DATETIME WITH TIMEZONE]"
+      [
+        datetime "1979-05-27T07:32:00Z" (mkdatetime 1979 05 27 7 32 0);
+        datetime "1979-05-27T00:32:00-07:00" (mkdatetime 1979 05 27 7 32 0);
+        datetime "1979-05-27T00:32:00.999999-07:00" (mkdatetime 1979 05 27 7 32 0 +. 0.999999);
+      ];
   ]
