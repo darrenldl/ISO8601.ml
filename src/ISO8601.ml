@@ -57,7 +57,7 @@ module Permissive = struct
       in
 
       let print_tz_hours fmt tz =
-        fprintf fmt "%0+3d" (Pervasives.truncate (tz /. 3600.))
+        fprintf fmt "%0+3d" (Stdlib.truncate (tz /. 3600.))
       in
 
       let print_tz_minutes fmt tz =
