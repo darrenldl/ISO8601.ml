@@ -125,7 +125,7 @@ let parse_test year month day hour minute second tz () =
     in
     Alcotest.(check tm_struct ("parse "^str) tm output)
 
-let parse_fixed_unix_time unix_time tz s () =
+let parse_fixed_unix_time unix_time _tz s () =
   let parsed = int_of_float (ISO8601.Permissive.datetime s) in
   Alcotest.(check int ("parse "^s) (int_of_float unix_time) parsed)
 
