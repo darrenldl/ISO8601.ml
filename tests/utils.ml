@@ -1,13 +1,12 @@
-let local_offset = fst (Unix.mktime (Unix.gmtime 0.))
-
-let mkdatetime y m d h mi s =
-  let (t, tm)=
-    Unix.mktime { Unix.tm_sec = s ; tm_min = mi ; tm_hour = h ;
-                  tm_wday = -1 ; tm_yday = -1 ; tm_isdst = false ;
-                  tm_mday = d ;
-                  tm_mon = m - 1 ;
-                  tm_year = y - 1900 ; } in
-  t -. local_offset +. (if tm.Unix.tm_isdst then 3600. else 0.)
+let mkdatetime year month day hour minute second =
+  let open Timere in
+  let month = match Timere.Utils.month_of_human_int month with
+    | None -> failwith "Invalid month"
+    | Some month -> month
+  in
+  Date_time.make_exn ~tz:Time_zone.utc ~year ~month ~day ~hour ~minute ~second ()
+  |> Date_time.to_timestamp_single
+  |> Int64.to_float
 
 let mkdate y m d = mkdatetime y m d 0 0 0
 
