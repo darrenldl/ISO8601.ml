@@ -2,20 +2,14 @@
   let int = int_of_string
 
   (* Date helpers *)
-  let mkdate y m d =
-    let (t, tm) = Unix.mktime {
-                      Unix.tm_sec = 0 ;
-                      tm_min = 0 ;
-                      tm_hour = 0 ;
-                      tm_mday = d ;
-                      tm_mon = m - 1 ;
-                      tm_year = y - 1900 ;
-                      tm_wday = -1 ;
-                      tm_yday = -1 ;
-                      tm_isdst = false ; } in
-    let offset = fst (Unix.mktime (Unix.gmtime 0. )) in
-    (* FIXME: Ensure the daylight saving time correction is right. *)
-    t -. offset +. (if tm.Unix.tm_isdst then 3600. else 0.)
+  let mkdate year month day =
+    let open Timere in
+    let month =
+      match Timere.Utils.month_of_human_int month with
+      | None -> failwith "Invalid month (FIXME)"
+      | Some month -> month
+    in
+    Date_time.make_exn ~tz:Time_zone.utc ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ()
 
   let ymd y m d = mkdate (int y) (int m) (int d)
   let ym y m = mkdate (int y) (int m) 1
@@ -23,7 +17,12 @@
   let yd y d = mkdate (int y) 1 (int d)
 
   (* Time helpers *)
-  let mktime h m s = float_of_int (h * 3600 + m * 60 + s)
+  let mktime hour minute second =
+    let open Timere in
+    make_hms_exn ~hour ~minute ~second
+    |> Utils.second_of_day_of_hms
+    |> float_of_int
+
   let hms h m s = mktime (int h) (int m) (int s)
   let hm h m =  mktime (int h) (int m) 0
   let h x =  mktime (int x) 0 0

@@ -2,29 +2,87 @@ module Lexer = ISO8601_lexer
 
 module Permissive = struct
 
-    let date_lex lexbuf = Lexer.date lexbuf
+    let date_lex' lexbuf = Lexer.date lexbuf
+
+    let date_lex lexbuf =
+      date_lex' lexbuf
+      |> Timere.Date_time.to_timestamp_single
+      |> Int64.to_float
+
+    let time_tz_lex' lexbuf =
+      let t = Lexer.time lexbuf in
+      let tz_offset = Lexer.timezone lexbuf in
+      let t' = int_of_float t in
+      let hms =
+        Timere.Utils.hms_of_second_of_day t'
+      in
+      let frac = t -. (float_of_int t') in
+      let tz_offset = match tz_offset with
+        | None -> None
+        | Some tz -> Some (int_of_float tz)
+      in
+      (hms, frac, tz_offset)
 
     let time_tz_lex lexbuf =
-      let t = Lexer.time lexbuf in
-      let tz = Lexer.timezone lexbuf in
-      let t = match tz with None -> t | Some o -> t -. o in
-      (t, tz)
+      let (hms, frac, tz_offset) = time_tz_lex' lexbuf in
+      let tz_offset =
+        match tz_offset with
+        | None -> None
+        | Some x -> Some (float_of_int x)
+      in
+      (float_of_int (Timere.Utils.second_of_day_of_hms hms) +. frac, tz_offset)
 
-    let datetime_tz_lex ?(reqtime=true) lexbuf =
-      let d = date_lex lexbuf in
+    let datetime_tz_lex' ~reqtime lexbuf =
+      let open Timere in
+      let d = date_lex' lexbuf in
       match Lexer.delim lexbuf with
       | None ->
         (* TODO: this should be a real exception *)
-        if reqtime then assert false else (d, None)
+        if reqtime then assert false else (d, 0., true)
       | Some _ ->
-        let (t, tz) = time_tz_lex lexbuf in
-        match tz with
-        | None -> (d +. t, tz)
-        | Some tz ->
-          (* obtain the daylight saving time for the given TZ and day *)
-          let td = d +. floor t in
-          let offt = fst (Unix.mktime (Unix.gmtime td)) -. td in
-          ((d +. t) -. offt, Some tz)
+        let (hms, frac, tz_offset_s) = time_tz_lex' lexbuf in
+        match tz_offset_s with
+        | None ->
+          let tz = match Time_zone.local () with
+            | None -> failwith "Failed to obtain local time zone"
+            | Some tz -> tz
+          in
+          (
+            Date_time.make_exn ~tz
+              ~year:d.year
+              ~month:d.month
+              ~day:d.day
+              ~hour:hms.hour
+              ~minute:hms.minute
+              ~second:hms.second (),
+            frac,
+            false
+          )
+        | Some tz_offset_s ->
+          (
+            Date_time.make_precise_exn
+              ~year:d.year
+              ~month:d.month
+              ~day:d.day
+              ~hour:hms.hour
+              ~minute:hms.minute
+              ~second:hms.second
+              ~tz_offset_s (),
+            frac,
+            false
+          )
+
+    let datetime_tz_lex ?(reqtime=true) lexbuf =
+      let (date_time, frac, _only_date) = datetime_tz_lex' ~reqtime lexbuf in
+      (
+        Int64.to_float (Timere.Date_time.to_timestamp_single date_time) +. frac,
+        let open Timere.Date_time in
+        match date_time.tz_info with
+        | `Tz_only _ -> None
+        | `Tz_offset_s_only offset
+        | `Tz_and_tz_offset_s (_, offset) ->
+          Some (float_of_int offset)
+      )
 
     let time_lex lexbuf =
       fst (time_tz_lex lexbuf)
