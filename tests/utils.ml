@@ -5,8 +5,7 @@ let mkdatetime year month day hour minute second =
     | Some month -> month
   in
   Date_time.make_exn ~tz:Time_zone.utc ~year ~month ~day ~hour ~minute ~second ()
-  |> Date_time.to_timestamp_single
-  |> Int64.to_float
+  |> Date_time.to_timestamp_float_single
 
 let mkdate y m d = mkdatetime y m d 0 0 0
 
