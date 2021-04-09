@@ -6,8 +6,7 @@ module Permissive = struct
 
     let date_lex lexbuf =
       date_lex' lexbuf
-      |> Timere.Date_time.to_timestamp_single
-      |> Int64.to_float
+      |> Timere.Date_time.to_timestamp_float_single
 
     let time_tz_lex' lexbuf =
       let t = Lexer.time lexbuf in
@@ -38,7 +37,7 @@ module Permissive = struct
       match Lexer.delim lexbuf with
       | None ->
         (* TODO: this should be a real exception *)
-        if reqtime then assert false else (d, 0., true)
+        if reqtime then assert false else (d, true)
       | Some _ ->
         let (hms, frac, tz_offset_s) = time_tz_lex' lexbuf in
         match tz_offset_s with
@@ -54,8 +53,9 @@ module Permissive = struct
               ~day:d.day
               ~hour:hms.hour
               ~minute:hms.minute
-              ~second:hms.second (),
-            frac,
+              ~second:hms.second
+              ~frac
+              (),
             false
           )
         | Some tz_offset_s ->
@@ -67,15 +67,16 @@ module Permissive = struct
               ~hour:hms.hour
               ~minute:hms.minute
               ~second:hms.second
-              ~tz_offset_s (),
-            frac,
+              ~frac
+              ~tz_offset_s
+              (),
             false
           )
 
     let datetime_tz_lex ?(reqtime=true) lexbuf =
-      let (date_time, frac, _only_date) = datetime_tz_lex' ~reqtime lexbuf in
+      let (date_time, _only_date) = datetime_tz_lex' ~reqtime lexbuf in
       (
-        Int64.to_float (Timere.Date_time.to_timestamp_single date_time) +. frac,
+        Timere.Date_time.to_timestamp_float_single date_time,
         let open Timere.Date_time in
         match date_time.tz_info with
         | `Tz_only _ -> None
