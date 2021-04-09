@@ -19,8 +19,15 @@
   (* Time helpers *)
   let mktime hour minute second =
     let open Timere in
+    let sign, hour =
+      if hour < 0 then
+        (-1, -1 * hour)
+      else
+        (1, hour)
+    in
     make_hms_exn ~hour ~minute ~second
     |> Utils.second_of_day_of_hms
+    |> (fun x -> x * sign)
     |> float_of_int
 
   let hms h m s = mktime (int h) (int m) (int s)
