@@ -17,24 +17,19 @@
   let yd y d = mkdate (int y) 1 (int d)
 
   (* Time helpers *)
-  let mktime hour minute second =
+  let mktime sign hour minute second =
     let open Timere in
-    let sign, hour =
-      if hour < 0 then
-        (-1, -1 * hour)
-      else
-        (1, hour)
-    in
     make_hms_exn ~hour ~minute ~second
     |> Utils.second_of_day_of_hms
     |> (fun x -> x * sign)
     |> float_of_int
 
-  let hms h m s = mktime (int h) (int m) (int s)
-  let hm h m =  mktime (int h) (int m) 0
-  let h x =  mktime (int x) 0 0
+  let hms sign h m s = mktime sign (int h) (int m) (int s)
+  let hm sign h m =  mktime sign (int h) (int m) 0
+  let h sign x =  mktime sign (int x) 0 0
   let z = 0.
-  let sign s = if s = '-' then fun x -> "-" ^ x else fun x -> x
+  (* let sign s = if s = '-' then fun x -> "-" ^ x else fun x -> x *)
+  let sign s = if s = '-' then -1 else 1
   let frac = function
     | "" -> 0.
     | f -> float_of_string ("." ^ (String.sub f 1 (String.length f - 1)))
@@ -91,15 +86,15 @@ and time = parse
 (* hhmmss / hh:mm:ss *)
 | (hour as h) (minute as m) (second as s) (frac? as f)
 | (hour as h) ':' (minute as m) ':' (second as s) (frac? as f)
-  { hms h m s +. frac f}
+  { hms 1 h m s +. frac f}
 
 (* hhmm / hh:mm *)
 | (hour as h) ':'? (minute as m) (frac? as f)
-  { hm h m +. (frac f *. 60.)}
+  { hm 1 h m +. (frac f *. 60.)}
 
 (* hh *)
 | hour as x (frac? as f)
-  { h x +. (frac f *. 3600.) }
+  { h 1 x +. (frac f *. 3600.) }
 
 and timezone = parse
 
@@ -109,11 +104,11 @@ and timezone = parse
 
 (* ±hhmm / ±hh:mm *)
 | (['+''-'] as s) (hour as h) ':'? (minute as m)
-  { let s = sign s in Some ( hm (s h) (s m) ) }
+  { Some ( hm (sign s) h (m) ) }
 
 (* ±hh *)
 | (['+''-'] as s) (hour as x)
-  { Some ( h ((sign s) x) ) }
+  { Some ( h (sign s) x ) }
 
 | "" { None }
 
