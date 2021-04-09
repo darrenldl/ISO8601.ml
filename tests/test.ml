@@ -15,27 +15,38 @@
  *
  *)
 
-module Tm_struct : Alcotest.TESTABLE with type t = Unix.tm = struct
-  type t = Unix.tm
+(* module Tm_struct : Alcotest.TESTABLE with type t = Unix.tm = struct
+ *   type t = Unix.tm
+ * 
+ *   let pp fmt tm =
+ *     let open Unix in
+ *     let s = Printf.sprintf "%d-%02d-%02dT%02d:%02d:%02d"
+ *         (1900+tm.tm_year) (tm.tm_mon+1) tm.tm_mday
+ *         tm.tm_hour tm.tm_min tm.tm_sec
+ *     in
+ *     Format.pp_print_string fmt s
+ * 
+ *   let equal a b =
+ *     Unix.(a.tm_sec = b.tm_sec
+ *           && a.tm_min = b.tm_min
+ *           && a.tm_hour = b.tm_hour
+ *           && a.tm_mday = b.tm_mday
+ *           && a.tm_mon = b.tm_mon
+ *           && a.tm_year = b.tm_year)
+ * end
+ * 
+ * let tm_struct = (module Tm_struct : Alcotest.TESTABLE with type t = Unix.tm) *)
 
-  let pp fmt tm =
-    let open Unix in
-    let s = Printf.sprintf "%d-%02d-%02dT%02d:%02d:%02d"
-        (1900+tm.tm_year) (tm.tm_mon+1) tm.tm_mday
-        tm.tm_hour tm.tm_min tm.tm_sec
-    in
-    Format.pp_print_string fmt s
+module Dt_testable : Alcotest.TESTABLE with type t = Timere.Date_time.t = struct
+  type t = Timere.Date_time.t
 
-  let equal a b =
-    Unix.(a.tm_sec = b.tm_sec
-          && a.tm_min = b.tm_min
-          && a.tm_hour = b.tm_hour
-          && a.tm_mday = b.tm_mday
-          && a.tm_mon = b.tm_mon
-          && a.tm_year = b.tm_year)
+  let pp =
+    Timere.Date_time.pp ()
+
+  let equal = Timere.Date_time.equal
 end
 
-let tm_struct = (module Tm_struct : Alcotest.TESTABLE with type t = Unix.tm)
+let dt_testable = (module Dt_testable : Alcotest.TESTABLE with type t = Timere.Date_time.t)
 
 type hemi = Neg | Pos
 type tz = Local | Z | Tz of hemi * int * int
@@ -73,7 +84,25 @@ let fixed_time_tests f = [
   f 1451407335. (-16200.) "2015-12-29T12:12:15-04:30";
 ]
 
-let str_tm year month day hour minute second tz =
+let timere_tz_of_tz tz =
+  match tz with
+  | Local -> (match Timere.Time_zone.local () with
+      | None -> failwith "Failed to obtain local time zone"
+      | Some tz -> tz)
+  | Z -> Timere.Time_zone.utc
+  | Tz (hemi, hours, minutes) ->
+    let offset_magnitude =
+      Timere.Duration.(make ~hours ~minutes () |> to_seconds)
+      |> Int64.to_int
+    in
+    let offset =
+      match hemi with
+      | Neg -> - offset_magnitude
+      | Pos -> offset_magnitude
+    in
+    Timere.Time_zone.make_offset_only offset
+
+let str_dt year month day hour minute second tz =
   let str = Printf.sprintf "%d-%02d-%02dT%02d:%02d:%02d%s"
       year month day hour minute second
       (match tz with
@@ -83,47 +112,43 @@ let str_tm year month day hour minute second tz =
        | Tz (Pos, hr, mn) -> Printf.sprintf "+%02d:%02d" hr mn
       )
   in
-  let tm = Unix.({
-    tm_sec  = second;
-    tm_min  = minute;
-    tm_hour = hour;
-    tm_mday = day;
-    tm_mon  = month - 1;
-    tm_year = year - 1900;
-    tm_wday = 0;
-    tm_yday = 0;
-    tm_isdst = false;
-  }) in
-  let t,  _ = Unix.mktime tm in
-  let t', _ = Unix.mktime (Unix.gmtime t) in
-  let local_unix_time = t -. (t' -. t) in
-  let tm = match tz with
-    | Local -> tm
-    | Z -> snd Unix.(mktime (gmtime local_unix_time))
-    | Tz (Neg, hr, mn) ->
-      let t = local_unix_time +. (float_of_int ((hr * 3600) + (mn * 60))) in
-      snd Unix.(mktime (gmtime t))
-    | Tz (Pos, hr, mn) ->
-      let t = local_unix_time -. (float_of_int ((hr * 3600) + (mn * 60))) in
-      snd Unix.(mktime (gmtime t))
-  in
-  (str, tm)
+    let tz = timere_tz_of_tz tz in
+    let month =
+      match Timere.Utils.month_of_human_int month with
+      | None -> failwith "Invalid month (FIXME)"
+      | Some month -> month
+    in
+    (str,
+     Timere.Date_time.make_exn ~tz ~year
+       ~month
+       ~day
+       ~hour
+       ~minute
+       ~second
+       ()
+    )
 
 let erange = Unix.Unix_error (Unix.ERANGE, "mktime", "")
 
 let parse_test year month day hour minute second tz () =
-  if year < 1900
-  then Alcotest.check_raises "< 1900 is ERANGE" erange (fun () ->
-    ignore (ISO8601.Permissive.datetime "1861-01-01T00:00:00Z")
-  )
-  else
-    let str, tm = str_tm year month day hour minute second tz in
+  (* if year < 1900
+   * then Alcotest.check_raises "< 1900 is ERANGE" erange (fun () ->
+   *   ignore (ISO8601.Permissive.datetime "1861-01-01T00:00:00Z")
+   * )
+   * else *)
+    let str, dt = str_dt year month day hour minute second tz in
     let parsed = ISO8601.Permissive.datetime str in
-    let output = match tz with
-      | Local    -> Unix.localtime parsed
-      | Z | Tz _ -> Unix.gmtime parsed
+    Printf.printf "parsed: %f\n" parsed;
+    let output =
+      match
+        Timere.Date_time.of_timestamp_float
+          ~tz_of_date_time:(timere_tz_of_tz tz)
+          parsed
+      with
+      | None -> failwith "Failed to convert"
+      | Some dt -> dt
     in
-    Alcotest.(check tm_struct ("parse "^str) tm output)
+    Alcotest.(check dt_testable ("parse "^str) dt output)
 
 let parse_fixed_unix_time unix_time _tz s () =
   let parsed = int_of_float (ISO8601.Permissive.datetime s) in
@@ -132,30 +157,42 @@ let parse_fixed_unix_time unix_time _tz s () =
 let parse_tests =
   time_tests parse_test @ fixed_time_tests parse_fixed_unix_time
 
-let string_of_datetime unix_time = function
-  | Local -> ISO8601.Permissive.string_of_datetime unix_time
-  | Z -> ISO8601.Permissive.string_of_datetimezone (unix_time,0.)
-  | Tz (Neg,hr,mn) ->
-    let tz = float_of_int (- (hr * 3600 + mn * 60)) in
-    ISO8601.Permissive.string_of_datetimezone (unix_time, tz)
-  | Tz (Pos,hr,mn) ->
-    let tz = float_of_int (hr * 3600 + mn * 60) in
-    ISO8601.Permissive.string_of_datetimezone (unix_time, tz)
+(* let string_of_datetime unix_time = function
+ *   | Local -> ISO8601.Permissive.string_of_datetime unix_time
+ *   | Z -> ISO8601.Permissive.string_of_datetimezone (unix_time,0.)
+ *   | Tz (Neg,hr,mn) ->
+ *     let tz = float_of_int (- (hr * 3600 + mn * 60)) in
+ *     ISO8601.Permissive.string_of_datetimezone (unix_time, tz)
+ *   | Tz (Pos,hr,mn) ->
+ *     let tz = float_of_int (hr * 3600 + mn * 60) in
+ *     ISO8601.Permissive.string_of_datetimezone (unix_time, tz) *)
+
+let string_of_datetime unix_time tz =
+  match
+    Timere.Date_time.of_timestamp_float
+      ~tz_of_date_time:(timere_tz_of_tz tz) unix_time
+  with
+  | None -> failwith "Failed to convert timestamp"
+  | Some dt ->
+    let format =
+      match tz with
+      | Local ->
+        "{year}-{mon:0X}-{mday:0X}T{hour:0X}:{min:0X}:{sec:0X}"
+      | Z ->
+        "{year}-{mon:0X}-{mday:0X}T{hour:0X}:{min:0X}:{sec:0X}Z"
+      | Tz _ ->
+        "{year}-{mon:0X}-{mday:0X}T{hour:0X}:{min:0X}:{sec:0X}{tzoff-sign}{tzoff-hour:0X}:{tzoff-min:0X}"
+    in
+    Timere.Date_time.to_string ~format dt
 
 let print_test year month day hour minute second tz () =
   (* We use Unix.mktime to find the epoch time but with year < 1900 it
      will error with ERANGE. *)
-  if year < 1900
-  then ()
-  else
-    let str, tm = str_tm year month day hour minute second tz in
-    let unix_time, _ = Unix.mktime tm in
-    let unix_time = match tz with
-      | Local -> unix_time
-      | Z | Tz _ ->
-        let offt, _ = Unix.mktime (Unix.gmtime unix_time) in
-        unix_time -. (offt -. unix_time)
-    in
+  (* if year < 1900
+   * then ()
+   * else *)
+    let str, dt = str_dt year month day hour minute second tz in
+    let unix_time = Timere.Date_time.to_timestamp_float_single dt in
     let output = string_of_datetime unix_time tz in
     Alcotest.(check string ("print "^str) str output)
 
@@ -167,12 +204,12 @@ let print_tests =
   time_tests print_test @ fixed_time_tests print_fixed_unix_time
 
 let rt_test year month day hour minute second tz () =
-  if year < 1900
-  then Alcotest.check_raises "< 1900 is ERANGE" erange (fun () ->
-    ignore (ISO8601.Permissive.datetime "1861-01-01T00:00:00")
-  )
-  else
-    let str, _ = str_tm year month day hour minute second tz in
+  (* if year < 1900
+   * then Alcotest.check_raises "< 1900 is ERANGE" erange (fun () ->
+   *   ignore (ISO8601.Permissive.datetime "1861-01-01T00:00:00")
+   * )
+   * else *)
+    let str, _ = str_dt year month day hour minute second tz in
     let output = string_of_datetime (ISO8601.Permissive.datetime str) tz in
     Alcotest.(check string ("roundtrip "^str) str output)
 
