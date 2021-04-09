@@ -174,6 +174,16 @@ let string_of_datetime unix_time tz =
   with
   | None -> failwith "Failed to convert timestamp"
   | Some dt ->
+    (* FIXME:
+
+       Timere does not have the notion of "local date time",
+       i.e. all date times have time zones tied to them upon
+       successful creation
+
+       Following is a workaround to mimic the behaviour
+       of the original code, which I'm not sure if it is problematic
+       or not
+    *)
     let format =
       match tz with
       | Local ->
