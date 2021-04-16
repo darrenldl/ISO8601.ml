@@ -92,7 +92,7 @@ let timere_tz_of_tz tz =
   | Z -> Timere.Time_zone.utc
   | Tz (hemi, hours, minutes) ->
     let offset_magnitude =
-      Timere.Duration.(make ~hours ~minutes () |> to_seconds)
+      Timere.Duration.(make ~hours ~minutes () |> to_span).s
       |> Int64.to_int
     in
     let offset =
@@ -193,7 +193,9 @@ let string_of_datetime unix_time tz =
       | Tz _ ->
         "{year}-{mon:0X}-{mday:0X}T{hour:0X}:{min:0X}:{sec:0X}{tzoff-sign}{tzoff-hour:0X}:{tzoff-min:0X}"
     in
-    Timere.Date_time.to_string ~format dt
+    match Timere.Date_time.to_string ~format dt with
+    | None -> failwith "Failed to print date time"
+    | Some s -> s
 
 let print_test year month day hour minute second tz () =
   (* We use Unix.mktime to find the epoch time but with year < 1900 it
