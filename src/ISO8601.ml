@@ -60,7 +60,7 @@ module Permissive = struct
           )
         | Some tz_offset_s ->
           (
-            Date_time.make_precise_exn
+            Date_time.make_unambiguous_exn
               ~year:d.year
               ~month:d.month
               ~day:d.day
