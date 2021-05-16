@@ -2,14 +2,8 @@
   let int = int_of_string
 
   (* Date helpers *)
-  let mkdate year month day =
-    let open Timere in
-    let month =
-      match Timere.Utils.month_of_human_int month with
-      | None -> failwith "Invalid month (FIXME)"
-      | Some month -> month
-    in
-    Date_time.make_exn ~tz:Time_zone.utc ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ()
+  let mkdate year month day : Timedesc.t =
+    Timedesc.make_exn ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~tz:Timedesc.Time_zone.utc ()
 
   let ymd y m d = mkdate (int y) (int m) (int d)
   let ym y m = mkdate (int y) (int m) 1
@@ -17,19 +11,21 @@
   let yd y d = mkdate (int y) 1 (int d)
 
   (* Time helpers *)
-  let mktime sign hour minute second =
-    let open Timere in
-    make_hms_exn ~hour ~minute ~second
-    |> Utils.second_of_day_of_hms
-    |> (fun x -> x * sign)
-    |> float_of_int
+  let mktime sign hour minute second : float =
+    Timedesc.Time.make_exn ~hour ~minute ~second ()
+    |> Timedesc.Time.to_span
+    |> (fun x -> match sign with
+        | `Pos -> x
+        | `Neg -> Timedesc.Span.neg x
+    )
+    |> Timedesc.Span.to_float_s
 
   let hms sign h m s = mktime sign (int h) (int m) (int s)
   let hm sign h m =  mktime sign (int h) (int m) 0
   let h sign x =  mktime sign (int x) 0 0
   let z = 0.
   (* let sign s = if s = '-' then fun x -> "-" ^ x else fun x -> x *)
-  let sign s = if s = '-' then -1 else 1
+  let sign s = if s = '-' then `Neg else `Pos
   let frac = function
     | "" -> 0.
     | f -> float_of_string ("." ^ (String.sub f 1 (String.length f - 1)))
@@ -86,15 +82,15 @@ and time = parse
 (* hhmmss / hh:mm:ss *)
 | (hour as h) (minute as m) (second as s) (frac? as f)
 | (hour as h) ':' (minute as m) ':' (second as s) (frac? as f)
-  { hms 1 h m s +. frac f}
+  { hms `Pos h m s +. frac f}
 
 (* hhmm / hh:mm *)
 | (hour as h) ':'? (minute as m) (frac? as f)
-  { hm 1 h m +. (frac f *. 60.)}
+  { hm `Pos h m +. (frac f *. 60.)}
 
 (* hh *)
 | hour as x (frac? as f)
-  { h 1 x +. (frac f *. 3600.) }
+  { h `Pos x +. (frac f *. 3600.) }
 
 and timezone = parse
 

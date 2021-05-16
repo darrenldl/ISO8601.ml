@@ -6,69 +6,69 @@ module Permissive = struct
 
     let date_lex lexbuf =
       date_lex' lexbuf
-      |> Timere.Date_time.to_timestamp_float_single
+      |> Timedesc.to_timestamp_float_s_single
 
     let time_tz_lex' lexbuf =
       let t = Lexer.time lexbuf in
       let tz_offset = Lexer.timezone lexbuf in
-      let t' = int_of_float t in
-      let hms =
-        Timere.Utils.hms_of_second_of_day t'
+      let time_of_day =
+        match Timedesc.Time.of_span (Timedesc.Span.of_float_s t) with
+        | None -> failwith "Unexpected case"
+        | Some x -> x
       in
-      let frac = t -. (float_of_int t') in
       let tz_offset = match tz_offset with
         | None -> None
         | Some tz -> Some (int_of_float tz)
       in
-      (hms, frac, tz_offset)
+      (time_of_day, tz_offset)
 
     let time_tz_lex lexbuf =
-      let (hms, frac, tz_offset) = time_tz_lex' lexbuf in
+      let (time_of_day, tz_offset) = time_tz_lex' lexbuf in
       let tz_offset =
         match tz_offset with
         | None -> None
         | Some x -> Some (float_of_int x)
       in
-      (float_of_int (Timere.Utils.second_of_day_of_hms hms) +. frac, tz_offset)
+      (Timedesc.Span.to_float_s @@ Timedesc.Time.to_span time_of_day, tz_offset)
 
     let datetime_tz_lex' ~reqtime lexbuf =
-      let open Timere in
       let d = date_lex' lexbuf in
       match Lexer.delim lexbuf with
       | None ->
         (* TODO: this should be a real exception *)
         if reqtime then assert false else (d, true)
       | Some _ ->
-        let (hms, frac, tz_offset_s) = time_tz_lex' lexbuf in
+        let (time_of_day, tz_offset_s) = time_tz_lex' lexbuf in
         match tz_offset_s with
         | None ->
-          let tz = match Time_zone.local () with
+          let tz = match Timedesc.Time_zone.local () with
             | None -> failwith "Failed to obtain local time zone"
             | Some tz -> tz
           in
           (
-            Date_time.make_exn ~tz
-              ~year:d.year
-              ~month:d.month
-              ~day:d.day
-              ~hour:hms.hour
-              ~minute:hms.minute
-              ~second:hms.second
-              ~frac
+            Timedesc.make_exn ~tz
+              ~year:(Timedesc.year d)
+              ~month:(Timedesc.month d)
+              ~day:(Timedesc.day d)
+              ~hour:time_of_day.hour
+              ~minute:time_of_day.minute
+              ~second:time_of_day.second
+              ~ns:time_of_day.ns
               (),
             false
           )
         | Some tz_offset_s ->
           (
-            Date_time.make_unambiguous_exn
-              ~year:d.year
-              ~month:d.month
-              ~day:d.day
-              ~hour:hms.hour
-              ~minute:hms.minute
-              ~second:hms.second
-              ~frac
-              ~tz_offset_s
+            let offset_from_utc = Timedesc.Span.make_small ~s:tz_offset_s () in
+            Timedesc.make_unambiguous_exn
+              ~year:(Timedesc.year d)
+              ~month:(Timedesc.month d)
+              ~day:(Timedesc.day d)
+              ~hour:time_of_day.hour
+              ~minute:time_of_day.minute
+              ~second:time_of_day.second
+              ~ns:time_of_day.ns
+              ~offset_from_utc
               (),
             false
           )
@@ -76,13 +76,10 @@ module Permissive = struct
     let datetime_tz_lex ?(reqtime=true) lexbuf =
       let (date_time, _only_date) = datetime_tz_lex' ~reqtime lexbuf in
       (
-        Timere.Date_time.to_timestamp_float_single date_time,
-        let open Timere.Date_time in
-        match date_time.tz_info with
-        | `Tz_only _ -> None
-        | `Tz_offset_s_only offset
-        | `Tz_and_tz_offset_s (_, offset) ->
-          Some (float_of_int offset)
+        Timedesc.to_timestamp_float_s_single date_time,
+        match Timedesc.offset_from_utc date_time with
+        | `Single x -> Some (Timedesc.Span.to_float_s x)
+        | `Ambiguous _ -> None
       )
 
     let time_lex lexbuf =
