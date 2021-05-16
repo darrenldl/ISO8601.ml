@@ -37,16 +37,16 @@
  * 
  * let tm_struct = (module Tm_struct : Alcotest.TESTABLE with type t = Unix.tm) *)
 
-module Dt_testable : Alcotest.TESTABLE with type t = Timere.Date_time.t = struct
-  type t = Timere.Date_time.t
+module Dt_testable : Alcotest.TESTABLE with type t = Timedesc.t = struct
+  type t = Timedesc.t
 
   let pp =
-    Timere.Date_time.pp ()
+    Timedesc.pp ()
 
-  let equal = Timere.Date_time.equal
+  let equal = Timedesc.equal
 end
 
-let dt_testable = (module Dt_testable : Alcotest.TESTABLE with type t = Timere.Date_time.t)
+let dt_testable = (module Dt_testable : Alcotest.TESTABLE with type t = Timedesc.t)
 
 type hemi = Neg | Pos
 type tz = Local | Z | Tz of hemi * int * int
@@ -84,23 +84,18 @@ let fixed_time_tests f = [
   f 1451407335. (-16200.) "2015-12-29T12:12:15-04:30";
 ]
 
-let timere_tz_of_tz tz =
+let timedesc_tz_of_tz tz =
   match tz with
-  | Local -> (match Timere.Time_zone.local () with
+  | Local -> (match Timedesc.Time_zone.local () with
       | None -> failwith "Failed to obtain local time zone"
       | Some tz -> tz)
-  | Z -> Timere.Time_zone.utc
+  | Z -> Timedesc.Time_zone.utc
   | Tz (hemi, hours, minutes) ->
-    let offset_magnitude =
-      Timere.Duration.(make ~hours ~minutes () |> to_span).s
-      |> Int64.to_int
-    in
     let offset =
-      match hemi with
-      | Neg -> - offset_magnitude
-      | Pos -> offset_magnitude
+      Timedesc.Span.For_human.(make_exn
+        ~sign:(match hemi with Neg -> `Neg | Pos -> `Pos) ~hours ~minutes ())
     in
-    Timere.Time_zone.make_offset_only offset
+    Timedesc.Time_zone.make_offset_only_exn offset
 
 let str_dt year month day hour minute second tz =
   let str = Printf.sprintf "%d-%02d-%02dT%02d:%02d:%02d%s"
@@ -112,14 +107,9 @@ let str_dt year month day hour minute second tz =
        | Tz (Pos, hr, mn) -> Printf.sprintf "+%02d:%02d" hr mn
       )
   in
-    let tz = timere_tz_of_tz tz in
-    let month =
-      match Timere.Utils.month_of_human_int month with
-      | None -> failwith "Invalid month (FIXME)"
-      | Some month -> month
-    in
+    let tz = timedesc_tz_of_tz tz in
     (str,
-     Timere.Date_time.make_exn ~tz ~year
+     Timedesc.make_exn ~tz ~year
        ~month
        ~day
        ~hour
@@ -141,8 +131,8 @@ let parse_test year month day hour minute second tz () =
     Printf.printf "parsed: %f\n" parsed;
     let output =
       match
-        Timere.Date_time.of_timestamp_float
-          ~tz_of_date_time:(timere_tz_of_tz tz)
+        Timedesc.of_timestamp_float_s
+          ~tz_of_date_time:(timedesc_tz_of_tz tz)
           parsed
       with
       | None -> failwith "Failed to convert"
@@ -169,8 +159,8 @@ let parse_tests =
 
 let string_of_datetime unix_time tz =
   match
-    Timere.Date_time.of_timestamp_float
-      ~tz_of_date_time:(timere_tz_of_tz tz) unix_time
+    Timedesc.of_timestamp_float_s
+      ~tz_of_date_time:(timedesc_tz_of_tz tz) unix_time
   with
   | None -> failwith "Failed to convert timestamp"
   | Some dt ->
@@ -193,7 +183,7 @@ let string_of_datetime unix_time tz =
       | Tz _ ->
         "{year}-{mon:0X}-{mday:0X}T{hour:0X}:{min:0X}:{sec:0X}{tzoff-sign}{tzoff-hour:0X}:{tzoff-min:0X}"
     in
-    match Timere.Date_time.to_string ~format dt with
+    match Timedesc.to_string ~format dt with
     | None -> failwith "Failed to print date time"
     | Some s -> s
 
@@ -204,7 +194,7 @@ let print_test year month day hour minute second tz () =
    * then ()
    * else *)
     let str, dt = str_dt year month day hour minute second tz in
-    let unix_time = Timere.Date_time.to_timestamp_float_single dt in
+    let unix_time = Timedesc.to_timestamp_float_s_single dt in
     let output = string_of_datetime unix_time tz in
     Alcotest.(check string ("print "^str) str output)
 
